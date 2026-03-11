@@ -1,11 +1,11 @@
 using System;
 using System.Drawing;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Security.Principal;
 using System.Windows.Forms;
 using AntdUI;
 using AntButton = AntdUI.Button;
-using AntInput = AntdUI.Input;
 using AntMessage = AntdUI.Message;
 using WinPanel = System.Windows.Forms.Panel;
 using WinLabel = System.Windows.Forms.Label;
@@ -15,15 +15,22 @@ namespace ProxyApp;
 
 public class Form1 : AntdUI.Window
 {
+    [DllImport("user32.dll")]
+    private static extern bool ReleaseCapture();
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr SendMessage(IntPtr hWnd, int msg, int wParam, int lParam);
+
+    private const int WM_NCLBUTTONDOWN = 0xA1;
+    private const int HTCAPTION = 0x2;
+
     private readonly WinPanel _header;
     private readonly WinLabel _headerTitle;
     private readonly WinLabel _headerDescription;
     private readonly WinPanel _container;
-    private readonly WinPanel _manualInputRow;
-    private readonly AntInput _pacInput;
-    private readonly AntButton _addPacButton;
     private readonly WinPanel _selectRow;
     private readonly Select _pacSelect;
+    private readonly AntButton _configButton;
     private readonly AntButton _applyButton;
     private readonly WinLabel _statusLabel;
     private readonly Switch _proxySwitch;
@@ -44,24 +51,30 @@ public class Form1 : AntdUI.Window
         {
             Dock = DockStyle.Top,
             Height = 76,
-            Padding = new Padding(24, 16, 24, 8)
+            Padding = new Padding(24, 16, 24, 8),
+            Cursor = Cursors.SizeAll
         };
+        _header.MouseDown += (_, e) => HandleHeaderDrag(e);
 
         _headerTitle = new WinLabel
         {
             Dock = DockStyle.Top,
             Height = 30,
             Font = new Font("Microsoft YaHei UI", 14F, FontStyle.Bold),
-            Text = "系统代理助手"
+            Text = "系统代理助手",
+            Cursor = Cursors.SizeAll
         };
+        _headerTitle.MouseDown += (_, e) => HandleHeaderDrag(e);
 
         _headerDescription = new WinLabel
         {
             Dock = DockStyle.Fill,
             Font = new Font("Microsoft YaHei UI", 9F, FontStyle.Regular),
             ForeColor = Color.DimGray,
-            Text = "管理和快速切换 Windows PAC 代理脚本"
+            Text = "管理和快速切换 Windows PAC 代理脚本（可拖动标题区域移动窗口）",
+            Cursor = Cursors.SizeAll
         };
+        _headerDescription.MouseDown += (_, e) => HandleHeaderDrag(e);
 
         _header.Controls.Add(_headerDescription);
         _header.Controls.Add(_headerTitle);
@@ -72,39 +85,24 @@ public class Form1 : AntdUI.Window
             Padding = new Padding(24)
         };
 
-        _manualInputRow = new WinPanel
-        {
-            Dock = DockStyle.Top,
-            Height = 54
-        };
-
-        _pacInput = new AntInput
-        {
-            Dock = DockStyle.Fill
-        };
-
-        _addPacButton = new AntButton
-        {
-            Text = "添加到历史",
-            Dock = DockStyle.Right,
-            Width = 120,
-        };
-        _addPacButton.Click += (_, _) => AddPacUrlToHistory();
-
-        _manualInputRow.Controls.Add(_pacInput);
-        _manualInputRow.Controls.Add(_addPacButton);
-
         _selectRow = new WinPanel
         {
             Dock = DockStyle.Top,
-            Height = 54,
-            Padding = new Padding(0, 10, 0, 0)
+            Height = 54
         };
 
         _pacSelect = new Select
         {
             Dock = DockStyle.Fill
         };
+
+        _configButton = new AntButton
+        {
+            Text = "配置脚本",
+            Dock = DockStyle.Right,
+            Width = 120
+        };
+        _configButton.Click += (_, _) => OpenConfigPage();
 
         _applyButton = new AntButton
         {
@@ -113,9 +111,10 @@ public class Form1 : AntdUI.Window
             Width = 120,
             Type = TTypeMini.Primary
         };
-        _applyButton.Click += (_, _) => ApplyProxyFromInput();
+        _applyButton.Click += (_, _) => ApplyProxyFromSelected();
 
         _selectRow.Controls.Add(_pacSelect);
+        _selectRow.Controls.Add(_configButton);
         _selectRow.Controls.Add(_applyButton);
 
         _statusLabel = new WinLabel
@@ -147,7 +146,6 @@ public class Form1 : AntdUI.Window
 
         _container.Controls.Add(bottomBar);
         _container.Controls.Add(_selectRow);
-        _container.Controls.Add(_manualInputRow);
 
         Controls.Add(_container);
         Controls.Add(_header);
@@ -157,6 +155,14 @@ public class Form1 : AntdUI.Window
 
         Load += Form1_Load;
         FormClosed += (_, _) => _proxyMonitorTimer.Stop();
+    }
+
+    private void HandleHeaderDrag(MouseEventArgs e)
+    {
+        if (e.Button != MouseButtons.Left) return;
+
+        ReleaseCapture();
+        SendMessage(Handle, WM_NCLBUTTONDOWN, HTCAPTION, 0);
     }
 
     private void Form1_Load(object? sender, EventArgs e)
@@ -174,6 +180,20 @@ public class Form1 : AntdUI.Window
         }
     }
 
+    private void OpenConfigPage()
+    {
+        using var configForm = new PacConfigForm();
+        configForm.ShowDialog(this);
+
+        LoadPacHistory();
+
+        if (!string.IsNullOrWhiteSpace(_managedPacUrl) &&
+            _pacSelect.Items.Cast<object>().All(x => !string.Equals(x.ToString(), _managedPacUrl, StringComparison.OrdinalIgnoreCase)))
+        {
+            _pacSelect.Text = _managedPacUrl;
+        }
+    }
+
     private void EnsurePrivilegeHint()
     {
         using WindowsIdentity identity = WindowsIdentity.GetCurrent();
@@ -183,22 +203,6 @@ public class Form1 : AntdUI.Window
         {
             AntMessage.warn(this, "当前未以管理员身份运行。通常修改当前用户代理设置不受影响，如遇受策略限制请尝试管理员身份启动。");
         }
-    }
-
-    private void AddPacUrlToHistory()
-    {
-        string pacUrl = _pacInput.Text?.Trim() ?? string.Empty;
-        if (string.IsNullOrWhiteSpace(pacUrl))
-        {
-            AntMessage.warn(this, "请先输入一个 PAC 脚本地址。");
-            return;
-        }
-
-        PacHistoryStore.SaveOrUpdate(pacUrl);
-        LoadPacHistory();
-        _pacSelect.Text = pacUrl;
-        _pacInput.Text = pacUrl;
-        AntMessage.success(this, "已添加到历史地址。");
     }
 
     private void LoadPacHistory()
@@ -228,7 +232,6 @@ public class Form1 : AntdUI.Window
             if (!string.IsNullOrWhiteSpace(pacUrl))
             {
                 _pacSelect.Text = pacUrl;
-                _pacInput.Text = pacUrl;
                 _managedPacUrl = pacUrl.Trim();
             }
 
@@ -274,7 +277,7 @@ public class Form1 : AntdUI.Window
         }
     }
 
-    private void ApplyProxyFromInput()
+    private void ApplyProxyFromSelected()
     {
         try
         {
@@ -288,7 +291,6 @@ public class Form1 : AntdUI.Window
             _proxySwitch.Checked = true;
             _isInitializing = false;
 
-            _pacInput.Text = pacUrl;
             UpdateStatus(true, pacUrl);
             AntMessage.success(this, "代理脚本已应用");
         }
@@ -301,14 +303,10 @@ public class Form1 : AntdUI.Window
     private string GetSelectedPacUrl()
     {
         string pacUrl = _pacSelect.Text?.Trim() ?? string.Empty;
-        if (string.IsNullOrWhiteSpace(pacUrl))
-        {
-            pacUrl = _pacInput.Text?.Trim() ?? string.Empty;
-        }
 
         if (string.IsNullOrWhiteSpace(pacUrl))
         {
-            throw new InvalidOperationException("请先输入或选择 PAC 脚本地址。");
+            throw new InvalidOperationException("请先在“配置脚本”页面新增地址，并在下拉框中选择。");
         }
 
         return pacUrl;
@@ -331,7 +329,6 @@ public class Form1 : AntdUI.Window
                 _isEnforcingProxy = true;
                 ProxyManager.SetProxy(true, _managedPacUrl);
                 _pacSelect.Text = _managedPacUrl;
-                _pacInput.Text = _managedPacUrl;
                 UpdateStatus(true, _managedPacUrl);
                 AntMessage.warn(this, "检测到 PAC 地址被外部修改，已自动恢复为本程序配置地址。");
             }

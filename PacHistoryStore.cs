@@ -41,14 +41,35 @@ public static class PacHistoryStore
         if (string.IsNullOrWhiteSpace(pacUrl)) return;
 
         List<string> urls = Load().ToList();
-        urls.RemoveAll(x => string.Equals(x, pacUrl.Trim(), StringComparison.OrdinalIgnoreCase));
-        urls.Insert(0, pacUrl.Trim());
+        Upsert(urls, pacUrl.Trim());
+        SaveAll(urls);
+    }
+
+    public static void ReplaceAll(IEnumerable<string> pacUrls)
+    {
+        List<string> urls = pacUrls
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Select(x => x.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(50)
+            .ToList();
+
+        SaveAll(urls);
+    }
+
+    private static void Upsert(List<string> urls, string pacUrl)
+    {
+        urls.RemoveAll(x => string.Equals(x, pacUrl, StringComparison.OrdinalIgnoreCase));
+        urls.Insert(0, pacUrl);
 
         if (urls.Count > 50)
         {
-            urls = urls.Take(50).ToList();
+            urls.RemoveRange(50, urls.Count - 50);
         }
+    }
 
+    private static void SaveAll(List<string> urls)
+    {
         Directory.CreateDirectory(DataDirectory);
         string json = JsonSerializer.Serialize(urls, JsonOptions);
         File.WriteAllText(HistoryFilePath, json);
