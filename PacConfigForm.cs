@@ -15,7 +15,8 @@ namespace ProxyApp;
 public class PacConfigForm : AntdUI.Window
 {
     private readonly WinListBox _listBox;
-    private readonly AntInput _input;
+    private readonly AntInput _nameInput;
+    private readonly AntInput _urlInput;
     private readonly AntButton _addButton;
     private readonly AntButton _updateButton;
     private readonly AntButton _deleteButton;
@@ -25,21 +26,22 @@ public class PacConfigForm : AntdUI.Window
     {
         Text = "配置脚本地址";
         StartPosition = FormStartPosition.CenterParent;
-        Size = new Size(760, 500);
-        MinimumSize = new Size(680, 420);
+        Size = new Size(760, 520);
+        MinimumSize = new Size(680, 440);
 
         var root = new WinPanel { Dock = DockStyle.Fill, Padding = new Padding(20) };
         var listPanel = new WinPanel { Dock = DockStyle.Fill };
-        var editorPanel = new WinPanel { Dock = DockStyle.Bottom, Height = 130, Padding = new Padding(0, 12, 0, 0) };
+        var editorPanel = new WinPanel { Dock = DockStyle.Bottom, Height = 170, Padding = new Padding(0, 12, 0, 0) };
 
         _listBox = new WinListBox
         {
             Dock = DockStyle.Fill,
             Font = new Font("Microsoft YaHei UI", 10F)
         };
-        _listBox.SelectedIndexChanged += (_, _) => _input.Text = _listBox.SelectedItem?.ToString() ?? string.Empty;
+        _listBox.SelectedIndexChanged += (_, _) => FillEditorBySelection();
 
-        _input = new AntInput { Dock = DockStyle.Top, Height = 40 };
+        _nameInput = new AntInput { Dock = DockStyle.Top, Height = 40 };
+        _urlInput = new AntInput { Dock = DockStyle.Top, Height = 40, Margin = new Padding(0, 8, 0, 0) };
 
         var buttonRow = new WinPanel { Dock = DockStyle.Bottom, Height = 44, Padding = new Padding(0, 8, 0, 0) };
 
@@ -60,7 +62,8 @@ public class PacConfigForm : AntdUI.Window
 
         listPanel.Controls.Add(_listBox);
         editorPanel.Controls.Add(buttonRow);
-        editorPanel.Controls.Add(_input);
+        editorPanel.Controls.Add(_urlInput);
+        editorPanel.Controls.Add(_nameInput);
 
         root.Controls.Add(listPanel);
         root.Controls.Add(editorPanel);
@@ -71,32 +74,46 @@ public class PacConfigForm : AntdUI.Window
 
     private void ReloadList()
     {
-        IReadOnlyList<string> history = PacHistoryStore.Load();
+        IReadOnlyList<PacEntry> history = PacHistoryStore.Load();
         _listBox.Items.Clear();
-        foreach (string url in history)
+        foreach (PacEntry entry in history)
         {
-            _listBox.Items.Add(url);
+            _listBox.Items.Add($"{entry.Name}  |  {entry.Url}");
         }
+    }
+
+    private void FillEditorBySelection()
+    {
+        int index = _listBox.SelectedIndex;
+        if (index < 0) return;
+
+        List<PacEntry> entries = PacHistoryStore.Load().ToList();
+        if (index >= entries.Count) return;
+
+        _nameInput.Text = entries[index].Name;
+        _urlInput.Text = entries[index].Url;
     }
 
     private void AddPac()
     {
-        string url = _input.Text?.Trim() ?? string.Empty;
-        if (string.IsNullOrWhiteSpace(url))
+        string name = _nameInput.Text?.Trim() ?? string.Empty;
+        string url = _urlInput.Text?.Trim() ?? string.Empty;
+
+        if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(url))
         {
-            AntMessage.warn(this, "请输入 PAC 地址。");
+            AntMessage.warn(this, "请输入自定义名称和 PAC 地址。");
             return;
         }
 
-        List<string> urls = PacHistoryStore.Load().ToList();
-        if (urls.Any(x => string.Equals(x, url, StringComparison.OrdinalIgnoreCase)))
+        List<PacEntry> entries = PacHistoryStore.Load().ToList();
+        if (entries.Any(x => string.Equals(x.Url, url, StringComparison.OrdinalIgnoreCase)))
         {
-            AntMessage.warn(this, "该地址已存在。请选择后使用“修改”更新。");
+            AntMessage.warn(this, "该 PAC 地址已存在。请选择后使用“修改”更新名称或地址。");
             return;
         }
 
-        urls.Insert(0, url);
-        PacHistoryStore.ReplaceAll(urls);
+        entries.Insert(0, new PacEntry { Name = name, Url = url });
+        PacHistoryStore.ReplaceAll(entries);
         ReloadList();
         AntMessage.success(this, "已添加。");
     }
@@ -110,16 +127,23 @@ public class PacConfigForm : AntdUI.Window
             return;
         }
 
-        string newUrl = _input.Text?.Trim() ?? string.Empty;
-        if (string.IsNullOrWhiteSpace(newUrl))
+        string name = _nameInput.Text?.Trim() ?? string.Empty;
+        string url = _urlInput.Text?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(url))
         {
-            AntMessage.warn(this, "请输入修改后的 PAC 地址。");
+            AntMessage.warn(this, "请输入自定义名称和 PAC 地址。");
             return;
         }
 
-        List<string> urls = PacHistoryStore.Load().ToList();
-        urls[index] = newUrl;
-        PacHistoryStore.ReplaceAll(urls);
+        List<PacEntry> entries = PacHistoryStore.Load().ToList();
+        if (index >= entries.Count)
+        {
+            AntMessage.warn(this, "当前选择项已失效，请重新选择。");
+            return;
+        }
+
+        entries[index] = new PacEntry { Name = name, Url = url };
+        PacHistoryStore.ReplaceAll(entries);
         ReloadList();
         _listBox.SelectedIndex = Math.Min(index, _listBox.Items.Count - 1);
         AntMessage.success(this, "已修改。");
@@ -134,11 +158,18 @@ public class PacConfigForm : AntdUI.Window
             return;
         }
 
-        List<string> urls = PacHistoryStore.Load().ToList();
-        urls.RemoveAt(index);
-        PacHistoryStore.ReplaceAll(urls);
+        List<PacEntry> entries = PacHistoryStore.Load().ToList();
+        if (index >= entries.Count)
+        {
+            AntMessage.warn(this, "当前选择项已失效，请重新选择。");
+            return;
+        }
+
+        entries.RemoveAt(index);
+        PacHistoryStore.ReplaceAll(entries);
         ReloadList();
-        _input.Text = string.Empty;
+        _nameInput.Text = string.Empty;
+        _urlInput.Text = string.Empty;
         AntMessage.success(this, "已删除。");
     }
 }

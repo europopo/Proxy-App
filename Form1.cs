@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.Linq;
 using System.Runtime.InteropServices;
@@ -44,6 +45,7 @@ public class Form1 : AntdUI.Window
     private readonly WinNotifyIcon _trayIcon;
     private readonly WinContextMenuStrip _trayMenu;
 
+    private readonly List<PacEntry> _pacEntries = new();
     private bool _isInitializing;
     private bool _isEnforcingProxy;
     private bool _trayHintShown;
@@ -72,20 +74,10 @@ public class Form1 : AntdUI.Window
             Height = 30
         };
 
-        _closeButton = new AntButton
-        {
-            Text = "✕",
-            Dock = DockStyle.Right,
-            Width = 44
-        };
+        _closeButton = new AntButton { Text = "✕", Dock = DockStyle.Right, Width = 44 };
         _closeButton.Click += (_, _) => ExitApplication();
 
-        _minimizeButton = new AntButton
-        {
-            Text = "—",
-            Dock = DockStyle.Right,
-            Width = 44
-        };
+        _minimizeButton = new AntButton { Text = "—", Dock = DockStyle.Right, Width = 44 };
         _minimizeButton.Click += (_, _) => MinimizeToTray();
 
         _windowActions.Controls.Add(_closeButton);
@@ -106,7 +98,7 @@ public class Form1 : AntdUI.Window
             Dock = DockStyle.Fill,
             Font = new Font("Microsoft YaHei UI", 9F, FontStyle.Regular),
             ForeColor = Color.DimGray,
-            Text = "管理和快速切换 Windows PAC 代理脚本（可拖动标题区域移动窗口）",
+            Text = "管理和快速切换 Windows PAC 代理脚本（主界面仅允许选择）",
             Cursor = Cursors.SizeAll
         };
         _headerDescription.MouseDown += (_, e) => HandleHeaderDrag(e);
@@ -115,29 +107,15 @@ public class Form1 : AntdUI.Window
         _header.Controls.Add(_headerTitle);
         _header.Controls.Add(_windowActions);
 
-        _container = new WinPanel
-        {
-            Dock = DockStyle.Fill,
-            Padding = new Padding(24)
-        };
+        _container = new WinPanel { Dock = DockStyle.Fill, Padding = new Padding(24) };
 
-        _selectRow = new WinPanel
-        {
-            Dock = DockStyle.Top,
-            Height = 54
-        };
+        _selectRow = new WinPanel { Dock = DockStyle.Top, Height = 54 };
 
-        _pacSelect = new Select
-        {
-            Dock = DockStyle.Fill
-        };
+        _pacSelect = new Select { Dock = DockStyle.Fill };
+        _pacSelect.KeyPress += (_, e) => e.Handled = true;
+        _pacSelect.KeyDown += (_, e) => e.SuppressKeyPress = true;
 
-        _configButton = new AntButton
-        {
-            Text = "配置脚本",
-            Dock = DockStyle.Right,
-            Width = 120
-        };
+        _configButton = new AntButton { Text = "配置脚本", Dock = DockStyle.Right, Width = 120 };
         _configButton.Click += (_, _) => OpenConfigPage();
 
         _applyButton = new AntButton
@@ -170,13 +148,7 @@ public class Form1 : AntdUI.Window
         };
         _proxySwitch.CheckedChanged += (_, _) => ProxySwitch_CheckedChanged();
 
-        var bottomBar = new WinPanel
-        {
-            Dock = DockStyle.Bottom,
-            Height = 54,
-            Padding = new Padding(0, 14, 0, 0)
-        };
-
+        var bottomBar = new WinPanel { Dock = DockStyle.Bottom, Height = 54, Padding = new Padding(0, 14, 0, 0) };
         bottomBar.Controls.Add(_statusLabel);
         bottomBar.Controls.Add(_proxySwitch);
 
@@ -209,7 +181,6 @@ public class Form1 : AntdUI.Window
     private void HandleHeaderDrag(MouseEventArgs e)
     {
         if (e.Button != MouseButtons.Left) return;
-
         ReleaseCapture();
         SendMessage(Handle, WM_NCLBUTTONDOWN, HTCAPTION, 0);
     }
@@ -231,17 +202,13 @@ public class Form1 : AntdUI.Window
 
     private void Form1_Resize(object? sender, EventArgs e)
     {
-        if (WindowState == FormWindowState.Minimized)
-        {
-            MinimizeToTray();
-        }
+        if (WindowState == FormWindowState.Minimized) MinimizeToTray();
     }
 
     private void MinimizeToTray()
     {
         Hide();
         _trayIcon.Visible = true;
-
         if (_trayHintShown) return;
 
         _trayIcon.ShowBalloonTip(1500, "系统代理助手", "程序已最小化到托盘，右击图标可退出。", ToolTipIcon.Info);
@@ -274,14 +241,7 @@ public class Form1 : AntdUI.Window
     {
         using var configForm = new PacConfigForm();
         configForm.ShowDialog(this);
-
         LoadPacHistory();
-
-        if (!string.IsNullOrWhiteSpace(_managedPacUrl) &&
-            _pacSelect.Items.Cast<object>().All(x => !string.Equals(x.ToString(), _managedPacUrl, StringComparison.OrdinalIgnoreCase)))
-        {
-            _pacSelect.Text = _managedPacUrl;
-        }
     }
 
     private void EnsurePrivilegeHint()
@@ -298,16 +258,18 @@ public class Form1 : AntdUI.Window
     private void LoadPacHistory()
     {
         var history = PacHistoryStore.Load();
+        _pacEntries.Clear();
+        _pacEntries.AddRange(history);
 
         _pacSelect.Items.Clear();
-        foreach (string url in history)
+        foreach (PacEntry entry in _pacEntries)
         {
-            _pacSelect.Items.Add(new SelectItem(url, url));
+            _pacSelect.Items.Add(new SelectItem(entry.Name, entry.Name));
         }
 
-        if (history.Count > 0)
+        if (_pacEntries.Count > 0)
         {
-            _pacSelect.Text = history.First();
+            _pacSelect.Text = _pacEntries[0].Name;
         }
     }
 
@@ -321,8 +283,12 @@ public class Form1 : AntdUI.Window
 
             if (!string.IsNullOrWhiteSpace(pacUrl))
             {
-                _pacSelect.Text = pacUrl;
                 _managedPacUrl = pacUrl.Trim();
+                PacEntry? entry = _pacEntries.FirstOrDefault(x => string.Equals(x.Url, _managedPacUrl, StringComparison.OrdinalIgnoreCase));
+                if (entry is not null)
+                {
+                    _pacSelect.Text = entry.Name;
+                }
             }
 
             UpdateStatus(enabled, pacUrl);
@@ -338,7 +304,6 @@ public class Form1 : AntdUI.Window
         if (_isInitializing) return;
 
         bool enabled = _proxySwitch.Checked;
-
         try
         {
             string pacUrl = GetSelectedPacUrl();
@@ -347,8 +312,13 @@ public class Form1 : AntdUI.Window
             if (enabled)
             {
                 _managedPacUrl = pacUrl;
-                PacHistoryStore.SaveOrUpdate(pacUrl);
-                LoadPacHistory();
+                PacEntry? selected = GetSelectedPacEntry();
+                if (selected is not null)
+                {
+                    PacHistoryStore.SaveOrUpdate(selected.Name, selected.Url);
+                    LoadPacHistory();
+                    _pacSelect.Text = selected.Name;
+                }
             }
             else
             {
@@ -371,17 +341,18 @@ public class Form1 : AntdUI.Window
     {
         try
         {
-            string pacUrl = GetSelectedPacUrl();
-            ProxyManager.SetProxy(true, pacUrl);
-            _managedPacUrl = pacUrl;
-            PacHistoryStore.SaveOrUpdate(pacUrl);
+            PacEntry selected = GetSelectedPacEntry() ?? throw new InvalidOperationException("请选择一个脚本名称。");
+            ProxyManager.SetProxy(true, selected.Url);
+            _managedPacUrl = selected.Url;
+            PacHistoryStore.SaveOrUpdate(selected.Name, selected.Url);
             LoadPacHistory();
+            _pacSelect.Text = selected.Name;
 
             _isInitializing = true;
             _proxySwitch.Checked = true;
             _isInitializing = false;
 
-            UpdateStatus(true, pacUrl);
+            UpdateStatus(true, selected.Url);
             AntMessage.success(this, "代理脚本已应用");
         }
         catch (Exception ex)
@@ -390,24 +361,28 @@ public class Form1 : AntdUI.Window
         }
     }
 
+    private PacEntry? GetSelectedPacEntry()
+    {
+        string selectedName = _pacSelect.Text?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(selectedName)) return null;
+
+        return _pacEntries.FirstOrDefault(x => string.Equals(x.Name, selectedName, StringComparison.OrdinalIgnoreCase));
+    }
+
     private string GetSelectedPacUrl()
     {
-        string pacUrl = _pacSelect.Text?.Trim() ?? string.Empty;
-
-        if (string.IsNullOrWhiteSpace(pacUrl))
+        PacEntry? selected = GetSelectedPacEntry();
+        if (selected is null)
         {
-            throw new InvalidOperationException("请先在“配置脚本”页面新增地址，并在下拉框中选择。");
+            throw new InvalidOperationException("主界面仅支持从下拉中选择脚本名称，请先到“配置脚本”页面维护地址。");
         }
 
-        return pacUrl;
+        return selected.Url;
     }
 
     private void EnforceManagedProxyIfChanged()
     {
-        if (_isEnforcingProxy || !_proxySwitch.Checked || string.IsNullOrWhiteSpace(_managedPacUrl))
-        {
-            return;
-        }
+        if (_isEnforcingProxy || !_proxySwitch.Checked || string.IsNullOrWhiteSpace(_managedPacUrl)) return;
 
         try
         {
@@ -418,7 +393,13 @@ public class Form1 : AntdUI.Window
             {
                 _isEnforcingProxy = true;
                 ProxyManager.SetProxy(true, _managedPacUrl);
-                _pacSelect.Text = _managedPacUrl;
+
+                PacEntry? entry = _pacEntries.FirstOrDefault(x => string.Equals(x.Url, _managedPacUrl, StringComparison.OrdinalIgnoreCase));
+                if (entry is not null)
+                {
+                    _pacSelect.Text = entry.Name;
+                }
+
                 UpdateStatus(true, _managedPacUrl);
                 AntMessage.warn(this, "检测到 PAC 地址被外部修改，已自动恢复为本程序配置地址。");
             }
