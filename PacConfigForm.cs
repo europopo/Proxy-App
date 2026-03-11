@@ -33,7 +33,7 @@ public class PacConfigForm : AntdUI.Window
 
         var root = new WinPanel { Dock = DockStyle.Fill, Padding = new Padding(20) };
         var listPanel = new WinPanel { Dock = DockStyle.Fill };
-        var editorPanel = new WinPanel { Dock = DockStyle.Bottom, Height = 210, Padding = new Padding(0, 14, 0, 0) };
+        var editorPanel = new WinPanel { Dock = DockStyle.Bottom, Height = 280, Padding = new Padding(0, 14, 0, 0) };
 
         var listTitle = new WinLabel
         {
@@ -73,20 +73,20 @@ public class PacConfigForm : AntdUI.Window
             Font = new Font("Microsoft YaHei UI", 9.5F, FontStyle.Bold)
         };
 
-        _nameInput = new AntInput { Dock = DockStyle.Top, Height = 40 };
+        _nameInput = new AntInput { Dock = DockStyle.Top, Height = 42 };
 
         var urlLabel = new WinLabel
         {
             Dock = DockStyle.Top,
-            Height = 24,
+            Height = 28,
             Text = "PAC 地址",
             Font = new Font("Microsoft YaHei UI", 9.5F, FontStyle.Bold),
-            Padding = new Padding(0, 8, 0, 0)
+            Padding = new Padding(0, 10, 0, 0)
         };
 
-        _urlInput = new AntInput { Dock = DockStyle.Top, Height = 40 };
+        _urlInput = new AntInput { Dock = DockStyle.Top, Height = 42 };
 
-        var buttonRow = new WinPanel { Dock = DockStyle.Bottom, Height = 48, Padding = new Padding(0, 10, 0, 0) };
+        var buttonRow = new WinPanel { Dock = DockStyle.Bottom, Height = 56, Padding = new Padding(0, 12, 0, 0) };
 
         _backButton = new AntButton { Text = "返回", Dock = DockStyle.Right, Width = 90 };
         _deleteButton = new AntButton { Text = "删除", Dock = DockStyle.Right, Width = 90 };
