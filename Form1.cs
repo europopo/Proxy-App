@@ -53,13 +53,15 @@ public class Form1 : AntdUI.Window
     private bool _isEnforcingProxy;
     private bool _trayHintShown;
     private string _managedPacUrl = string.Empty;
+    private readonly bool _startInTray;
 
-    public Form1()
+    public Form1(bool startInTray = false)
     {
         Text = "系统代理助手";
         StartPosition = FormStartPosition.CenterScreen;
         MinimumSize = new Size(760, 360);
         Size = new Size(920, 460);
+        _startInTray = startInTray;
 
         _header = new WinPanel
         {
@@ -154,11 +156,11 @@ public class Form1 : AntdUI.Window
         _autoStartCheckBox = new WinCheckBox
         {
             Dock = DockStyle.Right,
-            Width = 130,
+            Width = 104,
             Text = "开机自启动",
-            TextAlign = ContentAlignment.MiddleRight,
+            TextAlign = ContentAlignment.MiddleLeft,
             CheckAlign = ContentAlignment.MiddleLeft,
-            Font = new Font("Microsoft YaHei UI", 9F, FontStyle.Regular)
+            Font = new Font("Microsoft YaHei UI", 8.8F, FontStyle.Regular)
         };
         _autoStartCheckBox.CheckedChanged += (_, _) => AutoStartCheckBox_CheckedChanged();
 
@@ -230,6 +232,11 @@ public class Form1 : AntdUI.Window
             LoadCurrentState();
             LoadAutoStartState();
             _proxyMonitorTimer.Start();
+
+            if (_startInTray)
+            {
+                BeginInvoke(new Action(() => MinimizeToTray(showTip: false)));
+            }
         }
         catch (Exception ex)
         {
@@ -242,11 +249,12 @@ public class Form1 : AntdUI.Window
         if (WindowState == FormWindowState.Minimized) MinimizeToTray();
     }
 
-    private void MinimizeToTray()
+    private void MinimizeToTray(bool showTip = true)
     {
         Hide();
         _trayIcon.Visible = true;
-        if (_trayHintShown) return;
+
+        if (!showTip || _trayHintShown) return;
 
         _trayIcon.ShowBalloonTip(1500, "系统代理助手", "程序已最小化到托盘，右击图标可退出。", ToolTipIcon.Info);
         _trayHintShown = true;

@@ -24,7 +24,7 @@ public static class StartupManager
         {
             string exePath = Environment.ProcessPath
                 ?? throw new InvalidOperationException("无法获取当前程序路径，无法设置开机启动。");
-            key.SetValue(AppName, $"\"{exePath}\"");
+            key.SetValue(AppName, $"\"{exePath}\" --tray");
         }
         else
         {
