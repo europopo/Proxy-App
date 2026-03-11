@@ -21,9 +21,21 @@ public static class PacHistoryStore
 
     private static readonly string HistoryFilePath = Path.Combine(DataDirectory, "pac-history.json");
 
+    private static readonly IReadOnlyList<PacEntry> DefaultEntries = new List<PacEntry>
+    {
+        new() { Name = "szh_w", Url = "http://rbins-ap.bosch.com/szh_w.pac" },
+        new() { Name = "mi", Url = "http://rbins-ap.bosch.com/mi.pac" },
+        new() { Name = "sgp", Url = "http://rbins-ap.bosch.com/sgp.pac" }
+    };
+
     public static IReadOnlyList<PacEntry> Load()
     {
-        if (!File.Exists(HistoryFilePath)) return Array.Empty<PacEntry>();
+        if (!File.Exists(HistoryFilePath))
+        {
+            List<PacEntry> defaults = Normalize(DefaultEntries).ToList();
+            SaveAll(defaults);
+            return defaults;
+        }
 
         try
         {
