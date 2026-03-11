@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Security.Principal;
@@ -183,6 +184,12 @@ public class Form1 : AntdUI.Window
     {
         try
         {
+            string icoPath = Path.Combine(AppContext.BaseDirectory, "proxy.ico");
+            if (File.Exists(icoPath))
+            {
+                return new Icon(icoPath);
+            }
+
             return Icon.ExtractAssociatedIcon(Application.ExecutablePath)
                    ?? Icon
                    ?? SystemIcons.Application;
