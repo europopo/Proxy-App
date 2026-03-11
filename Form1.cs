@@ -133,7 +133,7 @@ public class Form1 : AntdUI.Window
         }
         catch (Exception ex)
         {
-            AntMessage.error($"初始化失败：{ex.Message}");
+            AntMessage.error(this, $"初始化失败：{ex.Message}");
         }
     }
 
@@ -144,7 +144,7 @@ public class Form1 : AntdUI.Window
 
         if (!principal.IsInRole(WindowsBuiltInRole.Administrator))
         {
-            AntMessage.warn("当前未以管理员身份运行。通常修改当前用户代理设置不受影响，如遇受策略限制请尝试管理员身份启动。");
+            AntMessage.warn(this, "当前未以管理员身份运行。通常修改当前用户代理设置不受影响，如遇受策略限制请尝试管理员身份启动。");
         }
     }
 
@@ -203,14 +203,14 @@ public class Form1 : AntdUI.Window
             }
 
             UpdateStatus(enabled, pacUrl);
-            AntMessage.success(enabled ? "PAC 代理已开启" : "PAC 代理已关闭");
+            AntMessage.success(this, enabled ? "PAC 代理已开启" : "PAC 代理已关闭");
         }
         catch (Exception ex)
         {
             _isInitializing = true;
             _proxySwitch.Checked = !_proxySwitch.Checked;
             _isInitializing = false;
-            AntMessage.error($"切换失败：{ex.Message}");
+            AntMessage.error(this, $"切换失败：{ex.Message}");
         }
     }
 
@@ -228,11 +228,11 @@ public class Form1 : AntdUI.Window
             _isInitializing = false;
 
             UpdateStatus(true, pacUrl);
-            AntMessage.success("代理脚本已应用");
+            AntMessage.success(this, "代理脚本已应用");
         }
         catch (Exception ex)
         {
-            AntMessage.error($"应用失败：{ex.Message}");
+            AntMessage.error(this, $"应用失败：{ex.Message}");
         }
     }
 
