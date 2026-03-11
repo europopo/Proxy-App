@@ -9,6 +9,7 @@ using System.Windows.Forms;
 using AntdUI;
 using AntButton = AntdUI.Button;
 using AntMessage = AntdUI.Message;
+using WinCheckBox = System.Windows.Forms.CheckBox;
 using WinContextMenuStrip = System.Windows.Forms.ContextMenuStrip;
 using WinLabel = System.Windows.Forms.Label;
 using WinNotifyIcon = System.Windows.Forms.NotifyIcon;
@@ -42,6 +43,7 @@ public class Form1 : AntdUI.Window
     private readonly AntButton _applyButton;
     private readonly WinLabel _statusLabel;
     private readonly Switch _proxySwitch;
+    private readonly WinCheckBox _autoStartCheckBox;
     private readonly WinTimer _proxyMonitorTimer;
     private readonly WinNotifyIcon _trayIcon;
     private readonly WinContextMenuStrip _trayMenu;
@@ -149,8 +151,20 @@ public class Form1 : AntdUI.Window
         };
         _proxySwitch.CheckedChanged += (_, _) => ProxySwitch_CheckedChanged();
 
+        _autoStartCheckBox = new WinCheckBox
+        {
+            Dock = DockStyle.Right,
+            Width = 130,
+            Text = "开机自启动",
+            TextAlign = ContentAlignment.MiddleRight,
+            CheckAlign = ContentAlignment.MiddleLeft,
+            Font = new Font("Microsoft YaHei UI", 9F, FontStyle.Regular)
+        };
+        _autoStartCheckBox.CheckedChanged += (_, _) => AutoStartCheckBox_CheckedChanged();
+
         var bottomBar = new WinPanel { Dock = DockStyle.Bottom, Height = 54, Padding = new Padding(0, 14, 0, 0) };
         bottomBar.Controls.Add(_statusLabel);
+        bottomBar.Controls.Add(_autoStartCheckBox);
         bottomBar.Controls.Add(_proxySwitch);
 
         _container.Controls.Add(bottomBar);
@@ -214,6 +228,7 @@ public class Form1 : AntdUI.Window
             EnsurePrivilegeHint();
             LoadPacHistory();
             LoadCurrentState();
+            LoadAutoStartState();
             _proxyMonitorTimer.Start();
         }
         catch (Exception ex)
@@ -257,6 +272,37 @@ public class Form1 : AntdUI.Window
         _trayIcon.Visible = false;
         _trayIcon.Dispose();
         _trayMenu.Dispose();
+    }
+
+    private void LoadAutoStartState()
+    {
+        _isInitializing = true;
+        try
+        {
+            _autoStartCheckBox.Checked = StartupManager.IsEnabled();
+        }
+        finally
+        {
+            _isInitializing = false;
+        }
+    }
+
+    private void AutoStartCheckBox_CheckedChanged()
+    {
+        if (_isInitializing) return;
+
+        try
+        {
+            StartupManager.SetEnabled(_autoStartCheckBox.Checked);
+            AntMessage.success(this, _autoStartCheckBox.Checked ? "已开启开机自启动" : "已关闭开机自启动");
+        }
+        catch (Exception ex)
+        {
+            _isInitializing = true;
+            _autoStartCheckBox.Checked = !_autoStartCheckBox.Checked;
+            _isInitializing = false;
+            AntMessage.error(this, $"设置开机自启动失败：{ex.Message}");
+        }
     }
 
     private void OpenConfigPage()
