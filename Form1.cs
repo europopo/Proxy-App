@@ -4,6 +4,8 @@ using System.Linq;
 using System.Security.Principal;
 using System.Windows.Forms;
 using AntdUI;
+using AntButton = AntdUI.Button;
+using AntMessage = AntdUI.Message;
 using WinPanel = System.Windows.Forms.Panel;
 using WinLabel = System.Windows.Forms.Label;
 
@@ -17,7 +19,7 @@ public class Form1 : AntdUI.Window
     private readonly WinPanel _container;
     private readonly WinPanel _inputRow;
     private readonly Select _pacSelect;
-    private readonly Button _applyButton;
+    private readonly AntButton _applyButton;
     private readonly WinLabel _statusLabel;
     private readonly Switch _proxySwitch;
 
@@ -73,7 +75,7 @@ public class Form1 : AntdUI.Window
             Dock = DockStyle.Fill
         };
 
-        _applyButton = new Button
+        _applyButton = new AntButton
         {
             Text = "应用",
             Dock = DockStyle.Right,
@@ -97,7 +99,7 @@ public class Form1 : AntdUI.Window
             CheckedText = "开启",
             UnCheckedText = "关闭"
         };
-        _proxySwitch.CheckedChanged += ProxySwitch_CheckedChanged;
+        _proxySwitch.CheckedChanged += (_, _) => ProxySwitch_CheckedChanged();
 
         var bottomBar = new WinPanel
         {
@@ -131,7 +133,7 @@ public class Form1 : AntdUI.Window
         }
         catch (Exception ex)
         {
-            Message.error($"初始化失败：{ex.Message}");
+            AntMessage.error($"初始化失败：{ex.Message}");
         }
     }
 
@@ -142,7 +144,7 @@ public class Form1 : AntdUI.Window
 
         if (!principal.IsInRole(WindowsBuiltInRole.Administrator))
         {
-            Message.warn("当前未以管理员身份运行。通常修改当前用户代理设置不受影响，如遇受策略限制请尝试管理员身份启动。");
+            AntMessage.warn("当前未以管理员身份运行。通常修改当前用户代理设置不受影响，如遇受策略限制请尝试管理员身份启动。");
         }
     }
 
@@ -183,7 +185,7 @@ public class Form1 : AntdUI.Window
         }
     }
 
-    private void ProxySwitch_CheckedChanged(object? sender, EventArgs e)
+    private void ProxySwitch_CheckedChanged()
     {
         if (_isInitializing) return;
 
@@ -201,14 +203,14 @@ public class Form1 : AntdUI.Window
             }
 
             UpdateStatus(enabled, pacUrl);
-            Message.success(enabled ? "PAC 代理已开启" : "PAC 代理已关闭");
+            AntMessage.success(enabled ? "PAC 代理已开启" : "PAC 代理已关闭");
         }
         catch (Exception ex)
         {
             _isInitializing = true;
             _proxySwitch.Checked = !_proxySwitch.Checked;
             _isInitializing = false;
-            Message.error($"切换失败：{ex.Message}");
+            AntMessage.error($"切换失败：{ex.Message}");
         }
     }
 
@@ -226,11 +228,11 @@ public class Form1 : AntdUI.Window
             _isInitializing = false;
 
             UpdateStatus(true, pacUrl);
-            Message.success("代理脚本已应用");
+            AntMessage.success("代理脚本已应用");
         }
         catch (Exception ex)
         {
-            Message.error($"应用失败：{ex.Message}");
+            AntMessage.error($"应用失败：{ex.Message}");
         }
     }
 
