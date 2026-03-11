@@ -28,7 +28,7 @@ public static class PacHistoryStore
                 .Select(x => x.Trim())
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList()
-                ?? Array.Empty<string>();
+                ?? new List<string>();
         }
         catch
         {
