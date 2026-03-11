@@ -4,17 +4,21 @@ using System.Linq;
 using System.Security.Principal;
 using System.Windows.Forms;
 using AntdUI;
+using WinPanel = System.Windows.Forms.Panel;
+using WinLabel = System.Windows.Forms.Label;
 
 namespace ProxyApp;
 
 public class Form1 : AntdUI.Window
 {
-    private readonly PageHeader _header;
-    private readonly Panel _container;
-    private readonly Panel _inputRow;
+    private readonly WinPanel _header;
+    private readonly WinLabel _headerTitle;
+    private readonly WinLabel _headerDescription;
+    private readonly WinPanel _container;
+    private readonly WinPanel _inputRow;
     private readonly Select _pacSelect;
     private readonly Button _applyButton;
-    private readonly Label _statusLabel;
+    private readonly WinLabel _statusLabel;
     private readonly Switch _proxySwitch;
 
     private bool _isInitializing;
@@ -26,21 +30,39 @@ public class Form1 : AntdUI.Window
         MinimumSize = new Size(720, 320);
         Size = new Size(860, 420);
 
-        _header = new PageHeader
+        _header = new WinPanel
         {
-            Text = "系统代理助手",
-            Description = "管理和快速切换 Windows PAC 代理脚本",
             Dock = DockStyle.Top,
-            Height = 76
+            Height = 76,
+            Padding = new Padding(24, 16, 24, 8)
         };
 
-        _container = new Panel
+        _headerTitle = new WinLabel
+        {
+            Dock = DockStyle.Top,
+            Height = 30,
+            Font = new Font("Microsoft YaHei UI", 14F, FontStyle.Bold),
+            Text = "系统代理助手"
+        };
+
+        _headerDescription = new WinLabel
+        {
+            Dock = DockStyle.Fill,
+            Font = new Font("Microsoft YaHei UI", 9F, FontStyle.Regular),
+            ForeColor = Color.DimGray,
+            Text = "管理和快速切换 Windows PAC 代理脚本"
+        };
+
+        _header.Controls.Add(_headerDescription);
+        _header.Controls.Add(_headerTitle);
+
+        _container = new WinPanel
         {
             Dock = DockStyle.Fill,
             Padding = new Padding(24)
         };
 
-        _inputRow = new Panel
+        _inputRow = new WinPanel
         {
             Dock = DockStyle.Top,
             Height = 54
@@ -60,7 +82,7 @@ public class Form1 : AntdUI.Window
         };
         _applyButton.Click += (_, _) => ApplyProxyFromInput();
 
-        _statusLabel = new Label
+        _statusLabel = new WinLabel
         {
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleLeft,
@@ -77,7 +99,7 @@ public class Form1 : AntdUI.Window
         };
         _proxySwitch.CheckedChanged += ProxySwitch_CheckedChanged;
 
-        var bottomBar = new Panel
+        var bottomBar = new WinPanel
         {
             Dock = DockStyle.Bottom,
             Height = 54,
@@ -161,23 +183,25 @@ public class Form1 : AntdUI.Window
         }
     }
 
-    private void ProxySwitch_CheckedChanged(object? sender, BoolEventArgs e)
+    private void ProxySwitch_CheckedChanged(object? sender, EventArgs e)
     {
         if (_isInitializing) return;
+
+        bool enabled = _proxySwitch.Checked;
 
         try
         {
             string pacUrl = _pacSelect.Text?.Trim() ?? string.Empty;
-            ProxyManager.SetProxy(e.Value, pacUrl);
+            ProxyManager.SetProxy(enabled, pacUrl);
 
-            if (e.Value)
+            if (enabled)
             {
                 PacHistoryStore.SaveOrUpdate(pacUrl);
                 LoadPacHistory();
             }
 
-            UpdateStatus(e.Value, pacUrl);
-            Message.success(e.Value ? "PAC 代理已开启" : "PAC 代理已关闭");
+            UpdateStatus(enabled, pacUrl);
+            Message.success(enabled ? "PAC 代理已开启" : "PAC 代理已关闭");
         }
         catch (Exception ex)
         {
