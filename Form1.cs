@@ -7,9 +7,12 @@ using System.Windows.Forms;
 using AntdUI;
 using AntButton = AntdUI.Button;
 using AntMessage = AntdUI.Message;
-using WinPanel = System.Windows.Forms.Panel;
+using WinContextMenuStrip = System.Windows.Forms.ContextMenuStrip;
 using WinLabel = System.Windows.Forms.Label;
+using WinNotifyIcon = System.Windows.Forms.NotifyIcon;
+using WinPanel = System.Windows.Forms.Panel;
 using WinTimer = System.Windows.Forms.Timer;
+using WinToolStripMenuItem = System.Windows.Forms.ToolStripMenuItem;
 
 namespace ProxyApp;
 
@@ -27,6 +30,9 @@ public class Form1 : AntdUI.Window
     private readonly WinPanel _header;
     private readonly WinLabel _headerTitle;
     private readonly WinLabel _headerDescription;
+    private readonly WinPanel _windowActions;
+    private readonly AntButton _minimizeButton;
+    private readonly AntButton _closeButton;
     private readonly WinPanel _container;
     private readonly WinPanel _selectRow;
     private readonly Select _pacSelect;
@@ -35,9 +41,12 @@ public class Form1 : AntdUI.Window
     private readonly WinLabel _statusLabel;
     private readonly Switch _proxySwitch;
     private readonly WinTimer _proxyMonitorTimer;
+    private readonly WinNotifyIcon _trayIcon;
+    private readonly WinContextMenuStrip _trayMenu;
 
     private bool _isInitializing;
     private bool _isEnforcingProxy;
+    private bool _trayHintShown;
     private string _managedPacUrl = string.Empty;
 
     public Form1()
@@ -55,6 +64,32 @@ public class Form1 : AntdUI.Window
             Cursor = Cursors.SizeAll
         };
         _header.MouseDown += (_, e) => HandleHeaderDrag(e);
+
+        _windowActions = new WinPanel
+        {
+            Dock = DockStyle.Right,
+            Width = 96,
+            Height = 30
+        };
+
+        _closeButton = new AntButton
+        {
+            Text = "✕",
+            Dock = DockStyle.Right,
+            Width = 44
+        };
+        _closeButton.Click += (_, _) => ExitApplication();
+
+        _minimizeButton = new AntButton
+        {
+            Text = "—",
+            Dock = DockStyle.Right,
+            Width = 44
+        };
+        _minimizeButton.Click += (_, _) => MinimizeToTray();
+
+        _windowActions.Controls.Add(_closeButton);
+        _windowActions.Controls.Add(_minimizeButton);
 
         _headerTitle = new WinLabel
         {
@@ -78,6 +113,7 @@ public class Form1 : AntdUI.Window
 
         _header.Controls.Add(_headerDescription);
         _header.Controls.Add(_headerTitle);
+        _header.Controls.Add(_windowActions);
 
         _container = new WinPanel
         {
@@ -153,8 +189,21 @@ public class Form1 : AntdUI.Window
         _proxyMonitorTimer = new WinTimer { Interval = 5000 };
         _proxyMonitorTimer.Tick += (_, _) => EnforceManagedProxyIfChanged();
 
+        _trayMenu = new WinContextMenuStrip();
+        _trayMenu.Items.Add(new WinToolStripMenuItem("退出程序", null, (_, _) => ExitApplication()));
+
+        _trayIcon = new WinNotifyIcon
+        {
+            Icon = Icon ?? SystemIcons.Application,
+            Text = "系统代理助手",
+            Visible = false,
+            ContextMenuStrip = _trayMenu
+        };
+        _trayIcon.DoubleClick += (_, _) => RestoreFromTray();
+
         Load += Form1_Load;
-        FormClosed += (_, _) => _proxyMonitorTimer.Stop();
+        Resize += Form1_Resize;
+        FormClosed += (_, _) => CleanupResources();
     }
 
     private void HandleHeaderDrag(MouseEventArgs e)
@@ -178,6 +227,47 @@ public class Form1 : AntdUI.Window
         {
             AntMessage.error(this, $"初始化失败：{ex.Message}");
         }
+    }
+
+    private void Form1_Resize(object? sender, EventArgs e)
+    {
+        if (WindowState == FormWindowState.Minimized)
+        {
+            MinimizeToTray();
+        }
+    }
+
+    private void MinimizeToTray()
+    {
+        Hide();
+        _trayIcon.Visible = true;
+
+        if (_trayHintShown) return;
+
+        _trayIcon.ShowBalloonTip(1500, "系统代理助手", "程序已最小化到托盘，右击图标可退出。", ToolTipIcon.Info);
+        _trayHintShown = true;
+    }
+
+    private void RestoreFromTray()
+    {
+        Show();
+        WindowState = FormWindowState.Normal;
+        Activate();
+        _trayIcon.Visible = false;
+    }
+
+    private void ExitApplication()
+    {
+        _trayIcon.Visible = false;
+        Close();
+    }
+
+    private void CleanupResources()
+    {
+        _proxyMonitorTimer.Stop();
+        _trayIcon.Visible = false;
+        _trayIcon.Dispose();
+        _trayMenu.Dispose();
     }
 
     private void OpenConfigPage()
