@@ -166,7 +166,7 @@ public class Form1 : AntdUI.Window
 
         _trayIcon = new WinNotifyIcon
         {
-            Icon = Icon ?? SystemIcons.Application,
+            Icon = GetTrayIcon(),
             Text = "系统代理助手",
             Visible = false,
             ContextMenuStrip = _trayMenu
@@ -176,6 +176,21 @@ public class Form1 : AntdUI.Window
         Load += Form1_Load;
         Resize += Form1_Resize;
         FormClosed += (_, _) => CleanupResources();
+    }
+
+
+    private Icon GetTrayIcon()
+    {
+        try
+        {
+            return Icon.ExtractAssociatedIcon(Application.ExecutablePath)
+                   ?? Icon
+                   ?? SystemIcons.Application;
+        }
+        catch
+        {
+            return Icon ?? SystemIcons.Application;
+        }
     }
 
     private void HandleHeaderDrag(MouseEventArgs e)

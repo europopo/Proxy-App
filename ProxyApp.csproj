@@ -5,11 +5,7 @@
     <UseWindowsForms>true</UseWindowsForms>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <ApplicationIcon>proxy_multi.ico</ApplicationIcon>
   </PropertyGroup>
-  <ItemGroup>
-    <Content Include="proxy_multi.ico" />
-  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="AntdUI" Version="1.5.6" />
