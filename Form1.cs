@@ -5,6 +5,7 @@ using System.Security.Principal;
 using System.Windows.Forms;
 using AntdUI;
 using AntButton = AntdUI.Button;
+using AntInput = AntdUI.Input;
 using AntMessage = AntdUI.Message;
 using WinPanel = System.Windows.Forms.Panel;
 using WinLabel = System.Windows.Forms.Label;
@@ -17,20 +18,26 @@ public class Form1 : AntdUI.Window
     private readonly WinLabel _headerTitle;
     private readonly WinLabel _headerDescription;
     private readonly WinPanel _container;
-    private readonly WinPanel _inputRow;
+    private readonly WinPanel _manualInputRow;
+    private readonly AntInput _pacInput;
+    private readonly AntButton _addPacButton;
+    private readonly WinPanel _selectRow;
     private readonly Select _pacSelect;
     private readonly AntButton _applyButton;
     private readonly WinLabel _statusLabel;
     private readonly Switch _proxySwitch;
+    private readonly Timer _proxyMonitorTimer;
 
     private bool _isInitializing;
+    private bool _isEnforcingProxy;
+    private string _managedPacUrl = string.Empty;
 
     public Form1()
     {
         Text = "系统代理助手";
         StartPosition = FormStartPosition.CenterScreen;
-        MinimumSize = new Size(720, 320);
-        Size = new Size(860, 420);
+        MinimumSize = new Size(760, 360);
+        Size = new Size(920, 460);
 
         _header = new WinPanel
         {
@@ -64,10 +71,33 @@ public class Form1 : AntdUI.Window
             Padding = new Padding(24)
         };
 
-        _inputRow = new WinPanel
+        _manualInputRow = new WinPanel
         {
             Dock = DockStyle.Top,
             Height = 54
+        };
+
+        _pacInput = new AntInput
+        {
+            Dock = DockStyle.Fill
+        };
+
+        _addPacButton = new AntButton
+        {
+            Text = "添加到历史",
+            Dock = DockStyle.Right,
+            Width = 120,
+        };
+        _addPacButton.Click += (_, _) => AddPacUrlToHistory();
+
+        _manualInputRow.Controls.Add(_pacInput);
+        _manualInputRow.Controls.Add(_addPacButton);
+
+        _selectRow = new WinPanel
+        {
+            Dock = DockStyle.Top,
+            Height = 54,
+            Padding = new Padding(0, 10, 0, 0)
         };
 
         _pacSelect = new Select
@@ -83,6 +113,9 @@ public class Form1 : AntdUI.Window
             Type = TTypeMini.Primary
         };
         _applyButton.Click += (_, _) => ApplyProxyFromInput();
+
+        _selectRow.Controls.Add(_pacSelect);
+        _selectRow.Controls.Add(_applyButton);
 
         _statusLabel = new WinLabel
         {
@@ -108,19 +141,21 @@ public class Form1 : AntdUI.Window
             Padding = new Padding(0, 14, 0, 0)
         };
 
-        _inputRow.Controls.Add(_pacSelect);
-        _inputRow.Controls.Add(_applyButton);
-
         bottomBar.Controls.Add(_statusLabel);
         bottomBar.Controls.Add(_proxySwitch);
 
         _container.Controls.Add(bottomBar);
-        _container.Controls.Add(_inputRow);
+        _container.Controls.Add(_selectRow);
+        _container.Controls.Add(_manualInputRow);
 
         Controls.Add(_container);
         Controls.Add(_header);
 
+        _proxyMonitorTimer = new Timer { Interval = 5000 };
+        _proxyMonitorTimer.Tick += (_, _) => EnforceManagedProxyIfChanged();
+
         Load += Form1_Load;
+        FormClosed += (_, _) => _proxyMonitorTimer.Stop();
     }
 
     private void Form1_Load(object? sender, EventArgs e)
@@ -130,6 +165,7 @@ public class Form1 : AntdUI.Window
             EnsurePrivilegeHint();
             LoadPacHistory();
             LoadCurrentState();
+            _proxyMonitorTimer.Start();
         }
         catch (Exception ex)
         {
@@ -146,6 +182,22 @@ public class Form1 : AntdUI.Window
         {
             AntMessage.warn(this, "当前未以管理员身份运行。通常修改当前用户代理设置不受影响，如遇受策略限制请尝试管理员身份启动。");
         }
+    }
+
+    private void AddPacUrlToHistory()
+    {
+        string pacUrl = _pacInput.Text?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(pacUrl))
+        {
+            AntMessage.warn(this, "请先输入一个 PAC 脚本地址。");
+            return;
+        }
+
+        PacHistoryStore.SaveOrUpdate(pacUrl);
+        LoadPacHistory();
+        _pacSelect.Text = pacUrl;
+        _pacInput.Text = pacUrl;
+        AntMessage.success(this, "已添加到历史地址。");
     }
 
     private void LoadPacHistory()
@@ -175,6 +227,8 @@ public class Form1 : AntdUI.Window
             if (!string.IsNullOrWhiteSpace(pacUrl))
             {
                 _pacSelect.Text = pacUrl;
+                _pacInput.Text = pacUrl;
+                _managedPacUrl = pacUrl.Trim();
             }
 
             UpdateStatus(enabled, pacUrl);
@@ -193,13 +247,18 @@ public class Form1 : AntdUI.Window
 
         try
         {
-            string pacUrl = _pacSelect.Text?.Trim() ?? string.Empty;
+            string pacUrl = GetSelectedPacUrl();
             ProxyManager.SetProxy(enabled, pacUrl);
 
             if (enabled)
             {
+                _managedPacUrl = pacUrl;
                 PacHistoryStore.SaveOrUpdate(pacUrl);
                 LoadPacHistory();
+            }
+            else
+            {
+                _managedPacUrl = string.Empty;
             }
 
             UpdateStatus(enabled, pacUrl);
@@ -218,8 +277,9 @@ public class Form1 : AntdUI.Window
     {
         try
         {
-            string pacUrl = _pacSelect.Text?.Trim() ?? string.Empty;
+            string pacUrl = GetSelectedPacUrl();
             ProxyManager.SetProxy(true, pacUrl);
+            _managedPacUrl = pacUrl;
             PacHistoryStore.SaveOrUpdate(pacUrl);
             LoadPacHistory();
 
@@ -227,6 +287,7 @@ public class Form1 : AntdUI.Window
             _proxySwitch.Checked = true;
             _isInitializing = false;
 
+            _pacInput.Text = pacUrl;
             UpdateStatus(true, pacUrl);
             AntMessage.success(this, "代理脚本已应用");
         }
@@ -236,10 +297,58 @@ public class Form1 : AntdUI.Window
         }
     }
 
+    private string GetSelectedPacUrl()
+    {
+        string pacUrl = _pacSelect.Text?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(pacUrl))
+        {
+            pacUrl = _pacInput.Text?.Trim() ?? string.Empty;
+        }
+
+        if (string.IsNullOrWhiteSpace(pacUrl))
+        {
+            throw new InvalidOperationException("请先输入或选择 PAC 脚本地址。");
+        }
+
+        return pacUrl;
+    }
+
+    private void EnforceManagedProxyIfChanged()
+    {
+        if (_isEnforcingProxy || !_proxySwitch.Checked || string.IsNullOrWhiteSpace(_managedPacUrl))
+        {
+            return;
+        }
+
+        try
+        {
+            var (enabled, pacUrl) = ProxyManager.GetCurrentProxyState();
+            string normalizedCurrent = pacUrl.Trim();
+
+            if (!enabled || !string.Equals(normalizedCurrent, _managedPacUrl, StringComparison.OrdinalIgnoreCase))
+            {
+                _isEnforcingProxy = true;
+                ProxyManager.SetProxy(true, _managedPacUrl);
+                _pacSelect.Text = _managedPacUrl;
+                _pacInput.Text = _managedPacUrl;
+                UpdateStatus(true, _managedPacUrl);
+                AntMessage.warn(this, "检测到 PAC 地址被外部修改，已自动恢复为本程序配置地址。");
+            }
+        }
+        catch (Exception ex)
+        {
+            AntMessage.error(this, $"监听恢复失败：{ex.Message}");
+        }
+        finally
+        {
+            _isEnforcingProxy = false;
+        }
+    }
+
     private void UpdateStatus(bool enabled, string pacUrl)
     {
         _statusLabel.Text = enabled
-            ? $"当前状态：已开启  |  PAC：{pacUrl}"
-            : "当前状态：已关闭";
+            ? $"当前状态：已开启  |  PAC：{pacUrl}  |  监听保护：运行中"
+            : "当前状态：已关闭  |  监听保护：已停止";
     }
 }
