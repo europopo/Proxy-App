@@ -9,6 +9,7 @@ using AntInput = AntdUI.Input;
 using AntMessage = AntdUI.Message;
 using WinPanel = System.Windows.Forms.Panel;
 using WinLabel = System.Windows.Forms.Label;
+using WinTimer = System.Windows.Forms.Timer;
 
 namespace ProxyApp;
 
@@ -26,7 +27,7 @@ public class Form1 : AntdUI.Window
     private readonly AntButton _applyButton;
     private readonly WinLabel _statusLabel;
     private readonly Switch _proxySwitch;
-    private readonly Timer _proxyMonitorTimer;
+    private readonly WinTimer _proxyMonitorTimer;
 
     private bool _isInitializing;
     private bool _isEnforcingProxy;
@@ -151,7 +152,7 @@ public class Form1 : AntdUI.Window
         Controls.Add(_container);
         Controls.Add(_header);
 
-        _proxyMonitorTimer = new Timer { Interval = 5000 };
+        _proxyMonitorTimer = new WinTimer { Interval = 5000 };
         _proxyMonitorTimer.Tick += (_, _) => EnforceManagedProxyIfChanged();
 
         Load += Form1_Load;
