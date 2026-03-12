@@ -24,6 +24,20 @@ public class Form1 : AntdUI.Window
     [DllImport("user32.dll")]
     private static extern bool ReleaseCapture();
 
+    private void InitializeComponent()
+    {
+        System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(Form1));
+        SuspendLayout();
+        // 
+        // Form1
+        // 
+        ClientSize = new Size(375, 375);
+        Name = "Form1";
+        ResumeLayout(false);
+
+
+    }
+
     [DllImport("user32.dll")]
     private static extern IntPtr SendMessage(IntPtr hWnd, int msg, int wParam, int lParam);
 
@@ -57,6 +71,11 @@ public class Form1 : AntdUI.Window
 
     public Form1(bool startInTray = false)
     {
+
+        ShowIcon = true;
+        Icon = new Icon("proxy_multi.ico");
+        InitializeComponent();
+
         Text = "系统代理助手";
         StartPosition = FormStartPosition.CenterScreen;
         MinimumSize = new Size(760, 360);
